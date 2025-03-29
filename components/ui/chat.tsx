@@ -3,7 +3,7 @@
 import { Message, useChat } from "@ai-sdk/react";
 import { createIdGenerator } from "ai";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Bot, Send, Loader2 } from "lucide-react";
+import { Bot, Loader2, Send } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -15,28 +15,40 @@ import "katex/dist/katex.min.css";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createChat } from "@/tools/chat-store";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea"; 
+import { ChatInput } from "./chatInputForm";
 
 export default function Chat({
   id,
   initialMessages,
 }: { id?: string | undefined; initialMessages?: Message[] } = {}) {
   const { user } = useUser();
-  const [groupedMessages, setGroupedMessages] = useState<Message[]>([]);
   const [initialInput, setInitialInput] = useState("");
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const initialTextareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // Auto-scroll to bottom when messages change
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-  
+  // Auto-resize initial textarea
   useEffect(() => {
-    scrollToBottom();
-  }, [groupedMessages]);
+    const textarea = initialTextareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [initialInput]);
+
+  // Handle keydown for initial input
+  const handleInitialKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const form = e.currentTarget.form;
+      if (form) {
+        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
+    }
+  };
   
   // Handle submitting the first message when there's no chat ID yet
   const handleInitialSubmit = async (e: React.FormEvent) => {
@@ -78,11 +90,6 @@ export default function Chat({
     }),
   });
 
-  // Effect to process messages
-  useEffect(() => {
-    setGroupedMessages(messages);
-  }, [messages]);
-
   // Effect to check for message parameter in URL (for first-time navigation)
   useEffect(() => {
     if (id && typeof window !== 'undefined') {
@@ -102,6 +109,16 @@ export default function Chat({
     }
   }, [id, router]);
 
+  // Auto-scroll to bottom when messages change
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  
+  // Effect to scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   // Render initial chat form when there's no ID
   if (!id) {
     return (
@@ -116,18 +133,23 @@ export default function Chat({
         </div>
         
         <div className="p-4 border-t backdrop-blur-sm bg-background/90">
-          <form className="flex gap-2 max-w-2xl mx-auto" onSubmit={handleInitialSubmit}>
-            <Input
-              className="flex-1 rounded-full shadow-sm border-muted-foreground/20"
+          <form className="flex gap-2 max-w-2xl mx-auto items-end" onSubmit={handleInitialSubmit}>
+            <Textarea
+              ref={initialTextareaRef}
+              className="flex-1 min-w-0 resize-none rounded-2xl shadow-sm border-muted-foreground/20 py-3 px-4 max-h-[200px]"
               value={initialInput}
               onChange={(e) => setInitialInput(e.target.value)}
+              onKeyDown={handleInitialKeyDown}
               placeholder="Type your message..."
               disabled={isCreatingChat}
+              autoComplete="off"
+              spellCheck="false"
+              rows={1}
             />
             <Button 
               type="submit" 
               size="icon"
-              className="rounded-full shadow-sm"
+              className="rounded-full shadow-sm mb-1 h-10 w-10"
               disabled={isCreatingChat || !initialInput.trim()}
             >
               {isCreatingChat ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
@@ -141,7 +163,7 @@ export default function Chat({
   return (
     <div className="flex flex-col h-[calc(100vh-6rem)] container max-w-4xl mx-auto bg-gradient-to-b from-background to-muted/20">
       <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6">
-        {groupedMessages.length === 0 ? (
+        {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center">
             <div className="text-muted-foreground max-w-md p-6 rounded-xl bg-background/80 backdrop-blur-sm shadow-sm border">
               <h3 className="text-xl font-semibold mb-2">Start a conversation</h3>
@@ -150,7 +172,7 @@ export default function Chat({
           </div>
         ) : (
           <>
-            {groupedMessages.map((message) => (
+            {messages.map((message) => (
               <div 
                 key={message.id} 
                 className={cn(
@@ -175,7 +197,7 @@ export default function Chat({
                   )}
                 >
                   {message.role === "user" ? (
-                    <div className="prose dark:prose-invert">{message.content}</div>
+                    <div className="prose dark:prose-invert whitespace-pre-wrap">{message.content}</div>
                   ) : (
                     <div className="prose prose-sm max-w-none dark:prose-invert prose-p:leading-relaxed prose-pre:p-2">
                       {typeof message.content === 'string' ? (
@@ -255,26 +277,12 @@ export default function Chat({
       </div>
 
       <div className="border-t p-4 backdrop-blur-sm bg-background/90">
-        <form 
-          onSubmit={handleSubmit} 
-          className="flex gap-2 items-center max-w-2xl mx-auto"
-        >
-          <Input
-            className="flex-1 min-w-0 rounded-full shadow-sm border-muted-foreground/20"
-            value={input}
-            placeholder="Type your message..."
-            onChange={handleInputChange}
-            disabled={status === 'submitted'}
-          />
-          <Button 
-            type="submit" 
-            size="icon"
-            className="rounded-full shadow-sm"
-            disabled={status === 'submitted' || !input.trim()}
-          >
-            <Send size={18} />
-          </Button>
-        </form>
+        <ChatInput
+          input={input}
+          handleInputChange={handleInputChange as any}
+          handleSubmit={handleSubmit}
+          status={status}
+        />
       </div>
     </div>
   );
