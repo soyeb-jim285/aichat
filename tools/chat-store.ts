@@ -1,3 +1,4 @@
+"use server";
 import { db } from "@/app/db";
 import { chats, messages } from "@/app/db/schema";
 import { auth } from '@clerk/nextjs/server'
